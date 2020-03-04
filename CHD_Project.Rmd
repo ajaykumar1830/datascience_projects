@@ -1,0 +1,391 @@
+---
+title: "CHD_Project"
+author: "Ajaykumar Kittur"
+date: "August 18, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(mice)
+library(lattice)
+library(corrplot)
+library(ggplot2)
+library(pastecs)
+library(easyGgplot2)
+library(Boruta)
+library(e1071)
+library(outliers)
+library(scales)
+library(xlsx)
+```
+
+## R Markdown
+```{r cars}
+#Read the data in and check summary statistics
+CHD_Patient_data = read.csv("C:\\Users\\AK57630\\Downloads\\Coronory Heart Risk Study\\Coronary_heart_risk_study.csv")
+summary(CHD_Patient_data)
+```
+```{r cars}
+#Missing data
+percent_missing <- function(x) {sum(is.na(x))/length(x)*100}
+apply(CHD_Patient_data, 2, percent_missing)
+md.pattern(CHD_Patient_data)
+#md.pairs(CHD_Patient_data)
+```
+
+```{r cars}
+#Impute Missing data 
+CHD_Patient_data$BPMeds <- factor(CHD_Patient_data$BPMeds, levels=c(0,1), labels=c("No", "Yes"))
+View(CHD_Patient_data)
+init = mice(CHD_Patient_data, maxit=0) 
+meth = init$method
+?mice
+predM = init$predictorMatrix
+#Remove variables from prediction as they have missing values but will be imputed
+predM[, c("cigsPerDay")]=0
+predM[, c("BPMeds")]=0
+predM[, c("totChol")]=0
+predM[, c("BMI")]=0
+predM[, c("heartRate")]=0
+predM[, c("glucose")]=0
+
+#Remove variables from imputation as they dont have missing values but will be used in prediction
+meth[c("age")]=""
+meth[c("male")]=""
+meth[c("currentSmoker")]=""
+meth[c("prevalentStroke")]=""
+meth[c("prevalentHyp")]=""
+meth[c("diabetes")]=""
+meth[c("sysBP")]=""
+meth[c("diaBP")]=""
+meth[c("TenYearCHD")]=""
+
+meth[c("cigsPerDay")]="norm" 
+meth[c("BPMeds")]="logreg" 
+meth[c("totChol")]="norm"
+meth[c("BMI")]="norm"
+meth[c("heartRate")]="norm"
+meth[c("glucose")]="norm"
+
+imputed_Patient_data <- mice(CHD_Patient_data, method= meth, predictorMatrix=predM, m=5, maxit = 50, seed = 500)
+imputed_Patient_data <- complete(imputed_Patient_data)
+imputed_Patient_data$BPMeds <- ifelse(imputed_Patient_data$BPMeds=='Yes', 1,0)
+
+View(imputed_Patient_data)
+
+corrplot(cor(imputed_Patient_data), type = "upper", order = "hclust",tl.col = "black", tl.srt = 45)
+```
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+stripplot(imputed_Patient_data, pch=20, cex=1.2)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r pressure, echo=FALSE}
+names(imputed_Patient_data)[names(imputed_Patient_data)=='male']<- 'gender' 
+imputed_Patient_data$gender <- factor(imputed_Patient_data$gender, levels=c(0,1), labels=c("female", "male"))
+imputed_Patient_data$BPMeds <- factor(imputed_Patient_data$BPMeds, levels=c(0,1), labels=c("No", "Yes"))
+imputed_Patient_data$currentSmoker <- factor(imputed_Patient_data$currentSmoker, levels=c(0,1), labels=c("No", "Yes"))
+imputed_Patient_data$prevalentStroke <- factor(imputed_Patient_data$prevalentStroke, levels=c(0,1), labels=c("No", "Yes"))
+imputed_Patient_data$prevalentHyp <- factor(imputed_Patient_data$prevalentHyp, levels=c(0,1), labels=c("No", "Yes"))
+imputed_Patient_data$diabetes <- factor(imputed_Patient_data$diabetes, levels=c(0,1), labels=c("No", "Yes"))
+imputed_Patient_data$TenYearCHD <- factor(imputed_Patient_data$TenYearCHD, levels=c(0,1), labels=c("No", "Yes"))
+
+
+
+```
+
+```{r pressure, echo=FALSE}
+with(imputed_Patient_data, table(TenYearCHD, gender))
+ggplot(imputed_Patient_data, aes(x = gender, fill = TenYearCHD)) +geom_bar(aes(y = (..count..)/sum(..count..)*100),position = "dodge")
+ggplot(imputed_Patient_data, aes(x = currentSmoker, fill = TenYearCHD)) +geom_bar(aes(y = (..count..)/sum(..count..)*100), position = "dodge")
+ggplot(imputed_Patient_data, aes(x = BPMeds, fill = TenYearCHD)) +geom_bar(aes(y = (..count..)/sum(..count..)*100), position = "dodge")
+ggplot(imputed_Patient_data, aes(x = diabetes, fill = TenYearCHD)) +geom_bar(aes(y = (..count..)/sum(..count..)*100), position = "dodge")
+ggplot(imputed_Patient_data, aes(x = prevalentHyp, fill = TenYearCHD)) +geom_bar(aes(y = (..count..)/sum(..count..)*100),position = "dodge")
+ggplot(imputed_Patient_data, aes(x = prevalentStroke, fill = TenYearCHD)) +geom_bar(aes(y = (..count..)/sum(..count..)*100),position = "dodge")
+ggplot(imputed_Patient_data, aes(x = education, fill = TenYearCHD)) +geom_bar(aes(y = (..count..)/sum(..count..)*100),position = "dodge")
+ggplot(imputed_Patient_data, aes(x = gender, fill = currentSmoker)) +geom_bar(aes(y = (..count..)/sum(..count..)*100),position = "dodge")
+ggplot(imputed_Patient_data, aes(x = gender, fill = diabetes)) +geom_bar(aes(y = (..count..)/sum(..count..)*100),position = "dodge")
+
+````
+
+
+```{r pressure, echo=FALSE}
+res <- stat.desc(imputed_Patient_data$cigsPerDay)
+round(res, 2)
+histInfo <- hist(imputed_Patient_data$cigsPerDay)
+histInfo
+hist(imputed_Patient_data$cigsPerDay, freq = FALSE, xlab = "Cigs per day", main = "Distrubtion of Cigs per Day", col = "lightgreen", xlim = c(-10, 150), ylim= c(0,0.1))
+curve(dnorm(x, mean = mean(imputed_Patient_data$cigsPerDay), sd = sd(imputed_Patient_data$cigsPerDay)), add= TRUE, col ="darkblue", lwd=2)
+````
+
+```{r pressure, echo=FALSE}
+res <- stat.desc(imputed_Patient_data$totChol)
+round(res, 2)
+histInfo <- hist(imputed_Patient_data$totChol)
+histInfo
+hist(imputed_Patient_data$totChol, freq = FALSE, xlab = "totChol", main = "Distrubtion of totChol", col = "lightblue", xlim = c(100, 700), ylim= c(0,0.009))
+curve(dnorm(x, mean = mean(imputed_Patient_data$totChol), sd = sd(imputed_Patient_data$totChol)), add= TRUE, col ="darkblue", lwd=2)
+````
+
+```{r pressure, echo=FALSE}
+res <- stat.desc(imputed_Patient_data$glucose)
+round(res, 2)
+histInfo <- hist(imputed_Patient_data$glucose)
+histInfo
+hist(imputed_Patient_data$glucose, freq = FALSE, xlab = "Glucose", main = "Distrubtion of Glucose", col = "orange", xlim = c(20, 400), ylim= c(0,0.02))
+curve(dnorm(x, mean = mean(imputed_Patient_data$glucose), sd = sd(imputed_Patient_data$glucose)), add= TRUE, col ="darkblue", lwd=2)
+````
+
+```{r pressure, echo=FALSE}
+res <- stat.desc(imputed_Patient_data$sysBP)
+round(res, 2)
+histInfo <- hist(imputed_Patient_data$sysBP)
+histInfo
+hist(imputed_Patient_data$sysBP, freq = FALSE, xlab = "Systolic BP", main = "Distrubtion of Systolic BP", col = "yellow", xlim = c(80, 290), ylim= c(0,0.02))
+curve(dnorm(x, mean = mean(imputed_Patient_data$sysBP), sd = sd(imputed_Patient_data$sysBP)), add= TRUE, col ="darkblue", lwd=2)
+````
+
+
+```{r pressure, echo=FALSE}
+res <- stat.desc(imputed_Patient_data$diaBP)
+round(res, 2)
+histInfo <- hist(imputed_Patient_data$diaBP)
+histInfo
+hist(imputed_Patient_data$diaBP, freq = FALSE, xlab = "Diastolic BP", main = "Distrubtion of Diastolic BP", col = "grey", xlim = c(45, 145), ylim= c(0,0.05))
+curve(dnorm(x, mean = mean(imputed_Patient_data$diaBP), sd = sd(imputed_Patient_data$diaBP)), add= TRUE, col ="darkblue", lwd=2)
+````
+
+
+```{r pressure, echo=FALSE}
+res <- stat.desc(imputed_Patient_data$BMI)
+round(res, 2)
+histInfo <- hist(imputed_Patient_data$BMI)
+histInfo
+hist(imputed_Patient_data$BMI, freq = FALSE, xlab = "BMI", main = "Distrubtion of BMI", col = "purple", xlim = c(17, 60), ylim= c(0,0.1))
+curve(dnorm(x, mean = mean(imputed_Patient_data$BMI), sd = sd(imputed_Patient_data$BMI)), add= TRUE, col ="darkblue", lwd=2)
+````
+
+```{r pressure, echo=FALSE}
+res <- stat.desc(imputed_Patient_data$heartRate)
+round(res, 2)
+histInfo <- hist(imputed_Patient_data$heartRate)
+histInfo
+hist(imputed_Patient_data$heartRate, freq = FALSE, xlab = "heartRate", main = "Distrubtion of heartRate", col = "lightblue", xlim = c(40, 150), ylim= c(0,0.04))
+curve(dnorm(x, mean = mean(imputed_Patient_data$heartRate), sd = sd(imputed_Patient_data$heartRate)), add= TRUE, col ="darkblue", lwd=2)
+````
+
+```{r pressure, echo= FALSE}
+
+
+#Add linear regression line
+ggplot2.scatterplot(data=imputed_Patient_data, xName='TenYearCHD',yName='sysBP', 
+                    addRegLine=TRUE, regLineColor="blue")
+
+ggplot2.scatterplot(data=imputed_Patient_data, xName='totChol',yName='cigsPerDay', 
+                    addRegLine=TRUE, regLineColor="blue")
+ggplot2.scatterplot(data=imputed_Patient_data, xName='glucose',yName='sysBP', 
+                    addRegLine=TRUE, regLineColor="blue")
+ggplot2.scatterplot(data=imputed_Patient_data, xName='totChol',yName='BMI', 
+                    addRegLine=TRUE, regLineColor="blue")
+ggplot2.scatterplot(data=imputed_Patient_data, xName='sysBP',yName='BMI', 
+                    addRegLine=TRUE, regLineColor="blue")
+ggplot2.scatterplot(data=imputed_Patient_data, xName='glucose',yName='BMI', 
+                    addRegLine=TRUE, regLineColor="blue")
+ggplot2.scatterplot(data=imputed_Patient_data, xName='heartRate',yName='BMI', 
+                    addRegLine=TRUE, regLineColor="blue")
+ggplot2.scatterplot(data=imputed_Patient_data, xName='heartRate',yName='sysBP', 
+                    addRegLine=TRUE, regLineColor="blue")
+ggplot2.scatterplot(data=imputed_Patient_data, xName='sysBP',yName='totChol', 
+                    addRegLine=TRUE, regLineColor="blue")
+imputed_Patient_data$prevalentHyp <- ifelse(imputed_Patient_data$prevalentHyp=='Yes', 1,0)
+imputed_Patient_data$diabetes <- ifelse(imputed_Patient_data$diabetes=='Yes', 1,0)
+cor(imputed_Patient_data$prevalentHyp, imputed_Patient_data$diabetes)
+````
+
+```{r pressure, echo= FALSE}
+
+#Aggregate_of_TotalChol <- aggregate(imputed_Patient_data$totChol,list(imputed_Patient_data$TenYearCHD), mean)
+#mean_of_totChol_No <- Aggregate_of_TotalChol[1,2]
+#mean_of_totChol_No
+#mean_of_totChol_Yes <- Aggregate_of_TotalChol[2,2]
+#mean_of_totChol_Yes
+
+splitted_chol_data <- split(imputed_Patient_data$totChol, imputed_Patient_data$TenYearCHD)
+t.test(splitted_chol_data$Yes, splitted_chol_data$No, alternative = "greater", var.equal = TRUE)
+#Interpretation that we reject the Null hypothesis that 
+````
+
+
+```{r pressure, echo= FALSE}
+p_chol<-ggplot(imputed_Patient_data, aes(x=TenYearCHD, y=totChol, fill=TenYearCHD)) +
+  geom_boxplot()
+p_chol
+
+p_cigs<-ggplot(imputed_Patient_data, aes(x=TenYearCHD, y=cigsPerDay, fill=TenYearCHD)) +
+  geom_boxplot()
+p_cigs
+
+
+p_diaBP<-ggplot(imputed_Patient_data, aes(x=TenYearCHD, y=diaBP, fill=TenYearCHD)) +
+  geom_boxplot()
+p_diaBP
+
+p_glucose<-ggplot(imputed_Patient_data, aes(x=TenYearCHD, y=glucose, fill=TenYearCHD)) +
+  geom_boxplot()
+p_glucose
+
+p_heart_Rate<-ggplot(imputed_Patient_data, aes(x=TenYearCHD, y=heartRate, fill=TenYearCHD)) +
+  geom_boxplot()
+p_heart_Rate
+
+p_BMI<-ggplot(imputed_Patient_data, aes(x=TenYearCHD, y=BMI, fill=TenYearCHD)) +
+  geom_boxplot()
+p_BMI
+
+prop.table(table(imputed_Patient_data$TenYearCHD))
+
+````
+
+```{r pressure, echo= FALSE}
+imputed_Patient_data$Age_bins <- cut(imputed_Patient_data$age,4,labels=c("30-40","40-50","50-60","60-70"))
+View(imputed_Patient_data)
+p_Age_bins<-ggplot(imputed_Patient_data, aes(x=Age_bins, y=totChol, fill=Age_bins)) +
+  geom_boxplot()
+p_Age_bins
+
+p_Age_bins<-ggplot(imputed_Patient_data, aes(x=Age_bins, y=totChol, fill=Age_bins)) +
+  geom_boxplot()
+p_Age_bins
+
+
+p_Age_bins<-ggplot(imputed_Patient_data, aes(x=Age_bins, y=totChol, fill=Age_bins)) +
+  geom_boxplot()
+p_Age_bins
+p_glucose <-ggplot(imputed_Patient_data, aes(x=Age_bins, y=glucose, fill=Age_bins)) +
+  geom_boxplot()
+p_glucose
+
+p_BMI_age <-ggplot(imputed_Patient_data, aes(x=Age_bins, y=BMI, fill=Age_bins)) +
+  geom_boxplot()
+p_BMI_age
+
+p_heartRate_age <-ggplot(imputed_Patient_data, aes(x=Age_bins, y=heartRate, fill=Age_bins)) +
+  geom_boxplot()
+p_heartRate_age
+
+p_diab <-ggplot(imputed_Patient_data, aes(x=diabetes, y=glucose, fill=diabetes)) +
+  geom_boxplot()
+p_diab
+
+````
+
+```{r pressure, echo= FALSE}
+set.seed(123)
+dt = sort(sample(nrow(imputed_Patient_data), nrow(imputed_Patient_data)*.7))
+train<-imputed_Patient_data[dt,]
+test<-imputed_Patient_data[-dt,]
+?Boruta
+boruta.train <- Boruta(TenYearCHD ~., data = train, doTrace = 2)
+print(boruta.train)
+
+#The tentative attributes will be classified as confirmed or rejected by comparing the median Z score of the attributes with the median Z score of the best shadow attribute
+
+final.boruta <- TentativeRoughFix(boruta.train)
+print(final.boruta)
+
+getSelectedAttributes(final.boruta, withTentative = F)
+
+boruta.df <- attStats(final.boruta)
+print(boruta.df)
+````
+
+
+```{r pressure, echo= FALSE}
+final_cleaned_data <- imputed_Patient_data
+final_cleaned_data$BPMeds <- ifelse(final_cleaned_data$BPMeds=='Yes', 1,0)
+final_cleaned_data$gender <- ifelse(imputed_Patient_data$gender=='Yes', 1,0)
+final_cleaned_data$prevalentStroke <- ifelse(final_cleaned_data$prevalentStroke=='Yes', 1,0)
+final_cleaned_data$prevalentHyp <- ifelse(final_cleaned_data$prevalentHyp=='Yes', 1,0)
+final_cleaned_data$diabetes <- ifelse(imputed_Patient_data$diabetes=='Yes', 1,0)
+final_cleaned_data$TenYearCHD <- ifelse(final_cleaned_data$TenYearCHD=='Yes', 1,0)
+
+cigsPerDay.displ <-skewness(final_cleaned_data$cigsPerDay)
+cigsPerDay.displ
+
+boxplot(final_cleaned_data$cigsPerDay, xlab = "Cigs per Day",
+   main = "Cigarettes Data")
+
+totChol.displ <-skewness(final_cleaned_data$totChol)
+totChol.displ
+
+boxplot(final_cleaned_data$totChol, xlab = "Chol",
+   main = "Chol Data")
+
+glucose.displ <-skewness(final_cleaned_data$glucose)
+glucose.displ
+
+boxplot(final_cleaned_data$glucose, xlab = "Glucose",
+   main = "Glucose Data")
+
+age.displ <-skewness(final_cleaned_data$age)
+age.displ
+
+boxplot(final_cleaned_data$age, xlab = "Age",
+   main = "Age Data")
+
+sysBP.displ <-skewness(final_cleaned_data$sysBP)
+sysBP.displ
+
+boxplot(final_cleaned_data$sysBP, xlab = "Sys BP",
+   main = "Sys BP Data")
+
+diaBP.displ <-skewness(final_cleaned_data$diaBP)
+diaBP.displ
+
+boxplot(final_cleaned_data$diaBP, xlab = "dia BP",
+   main = "dia BP Data")
+
+BMI.displ <-skewness(final_cleaned_data$BMI)
+BMI.displ
+
+boxplot(final_cleaned_data$BMI, xlab = "BMI",
+   main = "BMI Data")
+
+HR.displ <-skewness(final_cleaned_data$heartRate)
+HR.displ
+
+boxplot(final_cleaned_data$heartRate, xlab = "Heart Rate",
+   main = "Heart Rate Data")
+
+````
+
+```{r pressure, echo= FALSE}
+# get the z-scores for each value in glucose
+outlier_scores <- scores(final_cleaned_data$glucose)
+outlier_scores
+# create a logical vector the same length as outlier_scores
+# that is "TRUE" if outlier_scores is greater than 3 or
+# less than negative 3
+is_outlier <- outlier_scores > 3 | outlier_scores < -3
+
+# add a column with info whether the glucose value is an outlier
+final_cleaned_data$is_outlier_glucose <- is_outlier
+
+# create a dataframe with only outliers
+final_cleaned_data_glucose_outliers <- final_cleaned_data[outlier_scores > 3| outlier_scores < -3, ]
+# take a peek
+head(final_cleaned_data_glucose_outliers)
+View(final_cleaned_data_glucose_outliers)
+summary(final_cleaned_data_glucose_outliers)
+summary(final_cleaned_data)
+final_cleaned_data$glucose_postTreatment <- squish(final_cleaned_data$glucose, round(quantile(final_cleaned_data$glucose, c(.05, .95))))
+View(final_cleaned_data)
+write.xlsx(final_cleaned_data,"data.xlsx",sheetName="Sheet1", 
+  col.names=TRUE, row.names=TRUE, append=FALSE)
+````

@@ -1,0 +1,123 @@
+---
+title: "Model_Implementation"
+author: "Ajaykumar Kittur"
+date: "September 29, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caTools)
+library(MASS)
+library(car)
+library(ROCR)
+library(xgboost)
+```
+
+```{r cars}
+View(final_cleaned_data)
+final_cleaned_data$currentSmoker <- ifelse(final_cleaned_data$currentSmoker=='Yes', 1,0)
+View(final_cleaned_data)
+# Logistic Regression
+#Split the data into train and Test 
+table(final_cleaned_data$TenYearCHD)
+prop.table(table(final_cleaned_data$TenYearCHD))
+
+
+split <- sample.split(final_cleaned_data$TenYearCHD, SplitRatio = 0.7)
+train_data <- subset(final_cleaned_data, split == TRUE)
+test_data <- subset(final_cleaned_data, split == FALSE)
+model <- glm (TenYearCHD ~.-age, data = train_data, family = binomial)
+best_model <- stepAIC(model, direction = "both")
+vif(best_model)
+summary(best_model)
+
+#Interpretations
+#1 If you see all coeffecients are less than 0.05 except BPMeds so only this  variable 
+# is non significant
+#  The null deviance shows how well the response variable is predicted by a model that includes only the intercept. 
+# Including independent variables decreased the deviance to 3260.4 with a loss of 8 degrees of freedom
+# The Akaike Information Criterion (AIC) provides a method for assessing the quality of your model through comparison of related models.  It's based on the Deviance, but penalizes you for making the model more complicated. it's useful for comparing models
+
+#Choosing the threshold
+predictTrain = predict(best_model, type="response")
+summary(predictTrain)
+#the tapply function computes the average prediction for each of the true outcomes.
+tapply(predictTrain, train_data$TenYearCHD, mean)
+#We find that for all of the true cases, we predict an average probability of about 0.23 And for all of the false cases, we predict an average probability of about 0.14
+
+#How to select the value for threshold t
+#There are two types of errors that this model can make:
+#1 where model predicts 1, but the actual outcome is 0,
+#2 Where model predicts 0, but the actual outcome is 1.
+
+# Confusion matrix for threshold of 0.5
+table(train_data$TenYearCHD, predictTrain > 0.5)
+#Senstivity 
+24/(427+24)
+#Specificity 
+2497/(2497+20)
+
+table(train_data$TenYearCHD, predictTrain > 0.2)
+#Senstivity 
+216/(235+216)
+#How often when  it is actually CHD , we predict CHD
+#Specificity 
+2022/(2022+495)
+#How often when it is actually no CHD we predict no CHD 
+#Precisiom
+#When we predict CHD how often it is correct
+216/235
+#So how to choose the optimum threshold value.Picking a good threshold value is often challenging.A Receiver Operator Characteristic curve, or ROC curve, can help us decide which value of the threshold is best.
+
+#ROCR Curve
+ROCRpred <- prediction(predictTrain, train_data$TenYearCHD)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = TRUE, text.adj = c(-0.2,1.7))
+
+predictTest = predict(best_model, type = "response", newdata = test_data)
+#confusion matrix
+table(test_data$TenYearCHD, predictTest >= 0.2)
+Accuracy = (94+829)/(94+829+99+250)
+Accuracy # 72.5%
+
+
+#So which threshold value one should pick?
+#One should select the best threshold for the trade-off one wants to make.If you're more concerned with having a high specificity or low false positive rate, pick the threshold that maximizes the true positive rate while keeping the false positive rate really low.A threshold around (0.1, 0.5) on this ROC curve looks like a good choice in this case.On the other hand, if one is more concerned with having a high sensitivity or high true positive rate, one should pick a threshold that minimizes the false positive rate
+
+```
+
+
+
+```{r}
+# XGBoost works with matrices that contain all numeric variables
+# we also need to split the training data and label
+View(train_data)
+temp_train_data <- train_data[,1:15]
+View(temp_train_data)
+features_train<-as.matrix(temp_train_data)
+label_train<-as.matrix(train_data[,16])
+temp_test_data <- test_data[,1:15]
+View(temp_test_data)
+features_test<-as.matrix(temp_test_data)
+
+xgb.fit <- xgboost(
+  data = features_train,
+  label = label_train,
+  eta = 0.7,#this is like shrinkage in the previous algorithm
+  max_depth = 5,#Larger the depth, more complex the model; higher chances of overfitting. There is no                  standard value for max_depth. Larger data sets require deep trees to learn the rules                   from data.
+  min_child_weight = 3,#it blocks the potential feature interactions to prevent overfitting
+  nrounds = 1000,#controls the maximum number of iterations. For classification, it is similar to the                    number of trees to grow.
+  nfold = 5,
+  objective = "binary:logistic",  # for regression models
+  verbose = 0,               # silent,
+  early_stopping_rounds = 10 # stop if no improvement for 10 consecutive trees
+)
+predictTrain_xgb = predict(xgb.fit, type="response", newdata = features_train)
+summary(predictTrain_xgb)
+
+```
+
+
+
+

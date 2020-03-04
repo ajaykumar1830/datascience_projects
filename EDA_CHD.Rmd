@@ -1,0 +1,83 @@
+---
+title: "Exploratory Data Analysis"
+author: "Ajaykumar Kittur"
+date: "August 17, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(corrplot)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+CHD_data = read.csv("C:\\Users\\AK57630\\Downloads\\Coronory Heart Risk Study\\Coronary_heart_risk_study.csv")
+sapply(CHD_data, function(x) sum(is.na(x)))
+summary(CHD_data)
+
+#Impute missing values in cigs per day with mean value of cigs smoked per day by smokers
+str(CHD_data)
+CHD_temp_data <- subset(CHD_data, currentSmoker==1)
+CHD_temp_data <- na.omit(CHD_temp_data)
+Avg_cigs_per_day <- mean(CHD_temp_data$cigsPerDay)
+Avg_cigs_per_day <- round(Avg_cigs_per_day, digits=2)
+CHD_data$cigsPerDay[is.na(CHD_data$cigsPerDay)] <- Avg_cigs_per_day
+
+#Impute missing values in BPMeds with 1 if hypertensive else with 0 
+CHD_data$BPMeds[CHD_data$prevalentHyp==0 & is.na(CHD_data$BPMeds)] <- 0
+CHD_data$BPMeds[CHD_data$prevalentHyp==1 & is.na(CHD_data$BPMeds)] <- 1
+
+#Impute missing values using mean value
+CHD_temp_data <- na.omit(CHD_temp_data)
+Avg_tot_chl <- round(mean(CHD_temp_data$totChol), digits = 2)
+CHD_data$totChol[is.na(CHD_data$totChol)] <- Avg_tot_chl
+
+#Impute missing values using mean value depending on whether the person has diabetes or not
+CHD_temp_data <- subset(CHD_data, diabetes==1)
+CHD_temp_data <- na.omit(CHD_temp_data)
+Avg_glucose_diabetes <- mean(CHD_temp_data$glucose)
+Avg_glucose_diabetes <- round(Avg_glucose_diabetes, digits=2)
+CHD_data$glucose[is.na(CHD_data$glucose) & CHD_data$diabetes==1] <- Avg_glucose_diabetes
+
+CHD_temp_data <- subset(CHD_data, diabetes==0)
+CHD_temp_data <- na.omit(CHD_temp_data)
+Avg_glucose_nondiabetes <- mean(CHD_temp_data$glucose)
+Avg_glucose_nondiabetes <- round(Avg_glucose_nondiabetes, digits=2)
+CHD_data$glucose[is.na(CHD_data$glucose) & CHD_data$diabetes==0] <- Avg_glucose_nondiabetes
+
+
+#Impute missing values using mean value depending on whether the person tendency to have CHD
+CHD_temp_data <- subset(CHD_data, TenYearCHD==1)
+CHD_temp_data <- na.omit(CHD_temp_data)
+Avg_BMI_CHD <- mean(CHD_temp_data$BMI)
+Avg_BMI_CHD <- round(Avg_BMI_CHD, digits=2)
+CHD_data$BMI[is.na(CHD_data$BMI) & CHD_data$TenYearCHD==1] <- Avg_BMI_CHD
+
+CHD_temp_data <- subset(CHD_data, TenYearCHD==0)
+CHD_temp_data <- na.omit(CHD_temp_data)
+Avg_BMI_no_CHD <- mean(CHD_temp_data$BMI)
+Avg_BMI_no_CHD <- round(Avg_BMI_no_CHD, digits=2)
+CHD_data$BMI[is.na(CHD_data$BMI) & CHD_data$TenYearCHD==0] <- Avg_BMI_no_CHD
+
+CHD_temp_data <- subset(CHD_data)
+CHD_temp_data <- na.omit(CHD_temp_data)
+Avg_heart_rate <- mean(CHD_temp_data$heartRate)
+Avg_heart_rate <- round(Avg_heart_rate, digits=2)
+CHD_data$heartRate[is.na(CHD_data$heartRate)] <- Avg_heart_rate
+```
+
+
+## Including Plots
+```{r pressure, echo=FALSE}
+corrplot(CHD_data, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
